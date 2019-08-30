@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">QuikOrder Challenge</string>
+
+    <string name="menu_location_search_title">Search for location</string>
+    <string name="menu_location_toggle_title">Toggle show all locations or problem ones</string>
+
+
+</resources>
