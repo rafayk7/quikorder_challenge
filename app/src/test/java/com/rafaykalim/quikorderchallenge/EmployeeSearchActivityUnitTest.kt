@@ -9,9 +9,11 @@ import org.junit.Assert.*
  *
  * See [testing documentation](http://d.android.com/tools/testing).
  */
-class ExampleUnitTest {
+class EmployeeSearchActivityUnitTest {
+    // Write unit tests here
+    // For sorting, filtering
     @Test
-    fun addition_isCorrect() {
-        assertEquals(EmployeeSearchActivity(2, 2), 2 + 2)
+    fun sorting_isCorrect() {
+
     }
 }

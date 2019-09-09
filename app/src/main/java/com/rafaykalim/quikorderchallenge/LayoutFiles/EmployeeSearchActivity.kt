@@ -1,22 +1,21 @@
 package com.rafaykalim.quikorderchallenge.LayoutFiles
 
-import android.location.LocationListener
+import android.content.DialogInterface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.widget.SearchView
 import androidx.appcompat.app.AppCompatActivity
 import com.rafaykalim.quikorderchallenge.Controllers.LocationAdapter
 import com.rafaykalim.quikorderchallenge.Models.Location
 import com.rafaykalim.quikorderchallenge.R
-import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.widget.EditText
 import android.widget.ExpandableListView
+import android.widget.ImageView
+import androidx.appcompat.app.AlertDialog
 import com.rafaykalim.quikorderchallenge.Models.Employee
-import org.json.JSONObject
-import java.io.IOException
+import com.rafaykalim.quikorderchallenge.Utils.DataUtil
 
 
 class EmployeeSearchActivity : AppCompatActivity() {
@@ -25,97 +24,126 @@ class EmployeeSearchActivity : AppCompatActivity() {
     lateinit var searchBar : EditText
     lateinit var locationList : ArrayList<Location>
     lateinit var sendList : ArrayList<Location>
+    lateinit var filterListButton : ImageView
+    var filterOn = "Location"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        locationList = convertEmployeeListToLocationList(getData())
+        var dataUtil = DataUtil(this@EmployeeSearchActivity)
+
+        // Get needed data from Utils/DataUtil class
+        var employeeList = dataUtil.getEmployeeList()
+        locationList = dataUtil.convertEmployeeListToLocationList(employeeList)
+
         setContentView(R.layout.activity_employee_search)
 
+        // Initialize Views
         recyclerView = findViewById(R.id.activity_employee_search_location_recycler)
         searchBar = findViewById(R.id.activity_employee_search_bar)
-        // Add data here
+        filterListButton = findViewById(R.id.activity_employee_filter_list)
 
-        Log.d("LMAO-2", locationList.toString())
+        // This is the button to filter between employee name and location for list
+        filterListButton.setOnClickListener { changeFilterCondition() }
 
+        // sendList is the list which is sent to the LocationAdapter each time. I use the same list for simplicity
         sendList = ArrayList()
+
+        // Just starting up app, show all
         sendList.addAll(locationList)
         sendList = sortList(sendList)
 
         locationAdapter = LocationAdapter(this@EmployeeSearchActivity, sendList)
         recyclerView.setAdapter(locationAdapter)
 
+        // This is where I implement the search function.
+        // I know that this doesn't follow the MVC architecture 100% but I spent a lot of time trying to figure out how
+        // To make the ExpandableListView searchable, however I kept getting inconsistent results.
+        // Ideally, the LocationAdapter would implement Filterable and here we would just call the Filter.filter
+        // Property. If I have more time I will try to make that work, but for now this is a working (though not optimal) solution
         searchBar.addTextChangedListener(object : TextWatcher
         {
             override fun afterTextChanged(s: Editable?) {
                 // No Text, show all
                 if (searchBar.text.isEmpty())
                 {
-                    for (location : Location in locationList)
-                    {
-                        if (location !in sendList)
-                        {
-                            sendList.add(location)
-                        }
-                    }
+
+                    // Turn clear text icon to search icon
                     searchBar.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.material_search_24, 0)
+
+                    sendList = filterListEmpty()
+                    // Re-instantiates locationAdapter to a new LocationAdapter with this updated list
                     updateList(sendList)
-//                    searchBar.isCursorVisible = false
                 }
                 else
-                {
+                { // Text exists
+                    // Empty it and add needed ones.
                     sendList.clear()
+
                     var currText = searchBar.text.toString().toLowerCase().trim()
-                    Log.d("LMAO", currText)
-                    Log.d("LMAO", locationList.toString())
-                    for (location : Location in locationList)
-                    {
-                        if (location.name.toLowerCase().trim().contains(currText))
-                        {
-                            sendList.add(location)
-                        }
-                    }
+
+                    // Make it the clear text icon
                     searchBar.setCompoundDrawablesWithIntrinsicBounds(0, 0, R.drawable.material_cancel_24, 0)
-                    updateList(sendList)
-//                    searchBar.isCursorVisible = true
+
+                    // In a larger application, would replace this with a class that holds constants
+                    // and call it as FilteringOptions.LOCATION (which would be an int)
+                    // and FilteringOptions.EMPLOYEE_NAME. But since this is a smaller application,
+                    // comparing strings is fine (though worse performance wise)
+                    if (filterOn.equals("Location"))
+                    {
+                        sendList = filterListLocation(currText)
+                        updateList(sendList)
+                    }
+                    else if (filterOn.equals("Employee Name"))
+                    {
+                        sendList = filterListEmployee(currText)
+                        updateList(sendList)
+                    }
                 }
             }
 
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
-
+                // Maybe some more functionality here later?
             }
 
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-
+                // Maybe some more functionality here later?
             }
 
         })
 
-        searchBar.setOnTouchListener(object : View.OnTouchListener {
-            override fun onTouch(v: View?, event: MotionEvent?): Boolean {
-                val DRAWABLE_LEFT = 0
-                val DRAWABLE_TOP = 1
-                val DRAWABLE_RIGHT = 2
-                val DRAWABLE_BOTTOM = 3
-
-                if (event!!.action == MotionEvent.ACTION_DOWN)
-                {
-                    if (event.rawX >= (searchBar.getRight() - searchBar.getCompoundDrawables()[DRAWABLE_RIGHT].getBounds().width()))
-                    {
-                        searchBar.text.clear()
-                        return true
-                    }
-                }
-                else
-                {
-
-                }
-                return false
-            }
-        })
-
+        // This is only for the right end of the searchBar, where the cancel button is
+        searchBar.setOnTouchListener { _ , event -> clearTextField(event) }
     }
 
+    // This is how I know the EditText's right drawable is called
+    // It gets where the user
+    // The horizontal start of the right drawable is the right edge of EditText - the width of drawable
+    fun clearTextField(event: MotionEvent?) : Boolean
+    {
+        if (event != null)
+        {
+            val DRAWABLE_LEFT = 0
+            val DRAWABLE_TOP = 1
+            val DRAWABLE_RIGHT = 2
+            val DRAWABLE_BOTTOM = 3
+
+            if (event!!.action == MotionEvent.ACTION_DOWN)
+            {
+                if (event.rawX >= (searchBar.right - searchBar.compoundDrawables[DRAWABLE_RIGHT].bounds.width()))
+                {
+                    searchBar.text.clear()
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    // Sorts Location List by name. This function was needed as sortedWith returns a List
+    // Another optimization : Sort on intialization of the Array (at the beginning) and assign
+    // an int based on index in the sorted array
+    // For each subsequent sort (on search), sort based on that integer
     fun sortList(arrayList: ArrayList<Location>) : ArrayList<Location>
     {
         var arrayList = arrayList.sortedWith(compareBy { it.name })
@@ -124,107 +152,91 @@ class EmployeeSearchActivity : AppCompatActivity() {
         rArrList.addAll(arrayList)
         return rArrList
     }
+
+    fun filterListEmpty () : ArrayList<Location>
+    {
+        // Update sendList with all locations
+        sendList.clear()
+        for (location : Location in locationList)
+        {
+            // Prevent duplicates
+            if (location !in sendList)
+            {
+                sendList.add(location)
+            }
+        }
+
+        return sendList
+    }
+
+    fun filterListLocation (query : String) : ArrayList<Location>
+    {
+        // Empty list and add new
+        sendList.clear()
+
+        var currText = query.toLowerCase().trim()
+
+        for (location: Location in locationList)
+        {
+            if (location.name.toLowerCase().trim().contains(currText))
+            {
+                sendList.add(location)
+            }
+        }
+
+        return sendList
+    }
+
+    fun filterListEmployee (query: String) : ArrayList<Location>
+    {
+        // Empty list and add new
+        sendList.clear()
+
+        var currText = query.toLowerCase().trim()
+        for (location : Location in locationList)
+        {
+            for (employee : Employee in location.employeeList)
+            {
+                if (employee.name.toLowerCase().trim().contains(currText))
+                {
+                    sendList.add(location)
+                }
+            }
+        }
+        return sendList
+    }
+
+    // This creates a new LocationAdapter and re-renders the ListView with a new list
     fun updateList(sendList : ArrayList<Location>)
     {
         var sortedList = sortList(sendList)
-        Log.d("LMAO-SEND", sortedList.toString())
 
         locationAdapter = LocationAdapter(this@EmployeeSearchActivity, sortedList)
         recyclerView.setAdapter(locationAdapter)
     }
 
-    fun getJson(): JSONObject
+    // Creates an alert dialog to select the filtering option
+    fun changeFilterCondition()
     {
-        var json: String? = null
-        try {
-            val file = assets.open("data.json")
-            val size = file.available()
-            val buffer = ByteArray(size)
-            file.read(buffer)
-            file.close()
-            json = String(buffer)
-        } catch (ex: IOException) {
-            ex.printStackTrace()
-        }
+        var dialogBuilder = AlertDialog.Builder(this@EmployeeSearchActivity)
+        dialogBuilder.setTitle("How would you like to filter the list?")
+            .setSingleChoiceItems(
+                getFilteringOptions(), getFilteringOptions().indexOf(filterOn)
+            ) { dialog , which ->
+                filterOn = getFilteringOptions()[which]
 
-        return JSONObject(json)
-    }
-
-    // Split into getJson() and getEmployeeList()
-    fun getData() : ArrayList<Employee> {
-        var inputJson = getJson()
-        var empList = inputJson.getJSONArray("employees")
-        var empObjList = ArrayList<Employee>()
-        for(i in 0 until empList.length())
-        {
-            var employee = empList[i] as JSONObject
-            var employeeLocations = Array<String>(employee.getJSONArray("locations").length()) {
-                employee.getJSONArray("locations").getString(it)
+                // This updates the text, which calls afterTextChanged() in the EditText listener,
+                // Therefore updating the list
+                searchBar.text = searchBar.text
+                dialog.dismiss()
             }
-
-            var employeeObject = Employee(employee.getString("name"), employee.getString("title"), employeeLocations)
-            empObjList.add(employeeObject)
-        }
-
-        return empObjList
-
-        Log.d("LMAO", empObjList.toString())
+            .create()
+            .show()
     }
 
-    // Convert Employee ArrayList to Locations ArrayList
-    fun convertEmployeeListToLocationList(empList : ArrayList<Employee>) : ArrayList<Location>
+    // Can add job title if needed?
+    fun getFilteringOptions() : Array<String>
     {
-        // Create a HashMap of Location Name to Employee
-
-        var map = HashMap<String, ArrayList<Employee>>()
-        for (employee : Employee in empList)
-        {
-            for (loc : String in employee.locations)
-            {
-                if (map.containsKey(loc))
-                {
-                    Log.d("LMAO", loc)
-                    map.get(loc)!!.add(employee)
-                }
-                else
-                {
-                    map.put(loc, arrayListOf(employee))
-                }
-            }
-        }
-
-        var rList = ArrayList<Location>()
-
-        // Iterate through HashMap, create ArrayList of Location Objects
-        for ((locName, employeeList) in map)
-        {
-            var backgroundImgId = getBackgroundImgId(locName)
-            when (locName.trim().toLowerCase())
-            {
-                "austin" ->
-                {
-                    var location = Location(locName, employeeList, R.drawable.card_background_austin_vignette)
-                    rList.add(location)
-                }
-                "chicago" ->
-                {
-                    var location = Location(locName, employeeList, R.drawable.card_background_chicago_vignette)
-                    rList.add(location)
-                }
-                "new york" ->
-                {
-                    var location = Location(locName, employeeList, R.drawable.card_background_newyork_vignette)
-                    rList.add(location)
-                }
-            }
-        }
-        return rList
+        return arrayOf("Location", "Employee Name")
     }
-}
-
-// Image follows naming convention "card_background_${city_name}"
-fun getBackgroundImgId(locName : String) : String
-{
-    var locName = locName.toLowerCase().replace("\\s".toRegex(), "")
-    return "R.drawable.card_background_$locName"
 }

@@ -3,8 +3,14 @@
 
     <string name="menu_location_search_title">Search for location</string>
     <string name="menu_location_toggle_title">Toggle show all locations or problem ones</string>
+
     <string name="search_hint">Enter Location</string>
     <string name="searchbar_hint">Search</string>
+
+    <string name="no_location_text">Location</string>
+    <string name="no_employees_text">No Employees</string>
+
+    <string name="num_employees_text">%1$s Employees</string>
 
 
 </resources>
